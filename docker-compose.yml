@@ -7,24 +7,23 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - REACT_APP_API_URL=http://backend:3001
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    environment:
-      - REACT_APP_API_URL=http://backend:5000
-    depends_on:
-      - backend
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
     volumes:
       - ./backend:/app
-      - /app/node_modules
-
-networks:
-  default:
-    driver: bridge 
+      - /app/node_modules 

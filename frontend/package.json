@@ -1,6 +1,7 @@
 {
   "name": "frontend",
   "version": "0.1.0",
+  "description": "Projekt studencki - Aplikacje dla środowisk chmurowych",
   "dependencies": {
     "axios": "^0.19.0",
     "react": "^18.2.0",

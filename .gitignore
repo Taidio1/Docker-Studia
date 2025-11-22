@@ -6,6 +6,8 @@
 /build
 /dist
 
+.env
+
 # cypress
 /cypress/screenshots
 /cypress/videos

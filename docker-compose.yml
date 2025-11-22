@@ -1,29 +1,125 @@
 version: '3.8'
 
 services:
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: docker-studia-postgres
     environment:
-      - REACT_APP_API_URL=http://backend:3001
+      POSTGRES_DB: customersdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d customersdb" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
+  # Zookeeper (required for Kafka)
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    container_name: docker-studia-zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Apache Kafka  
+  kafka:
+    image: wurstmeister/kafka:latest
+    container_name: docker-studia-kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_CREATE_TOPICS: "customer-requests:1:1,customer-responses:1:1"
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -z localhost 9092 || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  # Backend Service (Node.js/Express)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
+    container_name: docker-studia-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=customersdb
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - KAFKA_BROKER=kafka:9092
+    ports:
+      - "3001:3001"
     volumes:
       - ./backend:/app
-      - /app/node_modules 
+      - /app/node_modules
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Frontend Service (React + nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: docker-studia-frontend
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      - REACT_APP_API_URL=http://localhost:3001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - app-network
+    restart: unless-stopped
+
+# Docker Networks
+networks:
+  app-network:
+    driver: bridge
+    name: customer-management-network
+
+# Docker Volumes for Data Persistence
+volumes:
+  postgres_data:
+    driver: local
+    name: customer-db-data

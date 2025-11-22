@@ -140,7 +140,7 @@ Projekt akademicki na przedmiot aplikacje dla środowisk chmurowych.
 
 ---
 
-## 🙏 Podziękowania
+## 🙏 Technologie
 
 - **React** - Framework frontendowy
 - **Express.js** - Framework backendowy
